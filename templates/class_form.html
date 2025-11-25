@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if cls %}Edit Class{% else %}Create Class{% endif %} - MSM Attendance{% endblock %}
+
+{% block content %}
+  <div class="container">
+    <div class="card">
+      <h1>{% if cls %}Edit Class{% else %}Create Class{% endif %}</h1>
+      <form method="post">{% csrf_token %}
+        <div class="form-group">
+          <label for="id_name">Name</label>
+          <input id="id_name" name="name" class="form-control" value="{% if cls %}{{ cls.name }}{% endif %}" required>
+        </div>
+        <div class="form-group">
+          <label for="id_description">Description</label>
+          <textarea id="id_description" name="description" class="form-control">{% if cls %}{{ cls.description }}{% endif %}</textarea>
+        </div>
+        <div class="d-flex justify-content-between">
+          <div>
+            <button type="submit" class="btn btn-primary">Save</button>
+            <a class="btn btn-secondary" href="{% url 'class_list' %}">Cancel</a>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

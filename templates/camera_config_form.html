@@ -1,168 +1,69 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ config.name|default:"Create Camera Configuration" }}</title>
+{% extends 'base.html' %}
 
-    <!-- Google Fonts for nice typography -->
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+{% block title %}{{ config.name|default:"Camera Configuration" }} - MSM Attendance{% endblock %}
 
-    <!-- CSS for styling the form -->
-    <style>
-        body {
-            font-family: 'Poppins', sans-serif;
-            background-color: #000000; /* Black background */
-            color: #FFD700; /* Yellow text */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
+{% block content %}
+    <div class="container" style="max-width:700px">
+        <div class="card">
+            <h1 class="text-primary">{{ config.name|default:"Create Camera Configuration" }}</h1>
 
-        .form-container {
-            background-color: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            padding: 30px;
-            width: 100%;
-            max-width: 400px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-            position: relative;
-            z-index: 1;
-        }
+            {% for message in messages %}
+                <div class="alert alert-info">{{ message }}</div>
+            {% endfor %}
 
-        h1 {
-            text-align: center;
-            margin-bottom: 20px;
-            font-size: 2rem;
-            letter-spacing: 1px;
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
-            color: #FFD700; /* Yellow text */
-        }
+            <form method="POST">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="name">Camera Name</label>
+                    <input type="text" id="name" name="name" class="form-control" value="{{ config.name|default:'' }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="camera_source">Camera Source</label>
+                    <input type="text" id="camera_source" name="camera_source" class="form-control" value="{{ config.camera_source|default:'' }}" placeholder="0 or IP camera URL" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <label for="threshold">Threshold</label>
+                        <input type="number" step="0.01" id="threshold" name="threshold" class="form-control" value="{{ config.threshold|default:0.8 }}" required>
+                    </div>
+                    <div class="form-group col-md-6">
+                        <label for="motion_threshold">Motion Threshold (pixels)</label>
+                        <input type="number" id="motion_threshold" name="motion_threshold" class="form-control" value="{{ config.motion_threshold|default:2000 }}">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="student_class">Class</label>
+                    <select id="student_class" name="student_class" class="form-control" required>
+                        <option value="">-- Select Class --</option>
+                        {% for cls in classes %}
+                            <option value="{{ cls.pk }}" {% if config.class_assigned and config.class_assigned.pk == cls.pk %}selected{% endif %}>{{ cls.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-4">
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="schedule_enabled" name="schedule_enabled" {% if config.schedule_enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="schedule_enabled">Enable Schedule</label>
+                        </div>
+                    </div>
+                    <div class="form-group col-md-4">
+                        <label for="pre_minutes">Pre Minutes</label>
+                        <input type="number" id="pre_minutes" name="pre_minutes" class="form-control" value="{{ config.pre_minutes|default:5 }}">
+                    </div>
+                    <div class="form-group col-md-4">
+                        <label for="post_minutes">Post Minutes</label>
+                        <input type="number" id="post_minutes" name="post_minutes" class="form-control" value="{{ config.post_minutes|default:5 }}">
+                    </div>
+                </div>
 
-        .alert {
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 5px;
-            background-color: rgba(255, 255, 0, 0.2); /* Light yellow background for alerts */
-            color: #FFD700; /* Yellow text */
-        }
-
-        label {
-            font-weight: 600;
-            margin-bottom: 10px;
-            display: block;
-            color: #FFD700; /* Yellow text */
-        }
-
-        input[type="text"], input[type="number"] {
-            width: 100%;
-            padding: 10px;
-            border: none;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            font-size: 1rem;
-            background-color: rgba(255, 255, 255, 0.8);
-            color: #333;
-            transition: box-shadow 0.3s ease;
-        }
-
-        input:focus {
-            box-shadow: 0 0 5px rgba(255, 215, 0, 0.8); /* Yellow shadow on focus */
-            outline: none;
-        }
-
-        button {
-            width: 100%;
-            padding: 12px;
-            background-color: #FFD700; /* Yellow button */
-            border: none;
-            border-radius: 5px;
-            font-size: 1.2rem;
-            color: #000; /* Black text for contrast */
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.3s ease;
-        }
-
-        button:hover {
-            background-color: #FFC107; /* Darker yellow on hover */
-        }
-
-        /* New button styles for Back to List and Back to Home */
-        .nav-button {
-            display: inline-block;
-            margin-top: 10px;
-            padding: 8px 12px;
-            background-color: #FFD700;
-            color: #000;
-            border: none;
-            border-radius: 5px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background 0.3s ease, transform 0.3s ease;
-        }
-
-        .nav-button:hover {
-            background-color: #FFC107;
-            transform: scale(1.05);
-        }
-
-        a {
-            display: block;
-            text-align: center;
-            margin-top: 20px;
-            color: #FFD700;
-            text-decoration: none;
-            font-size: 1rem;
-            font-weight: 500;
-        }
-
-        a:hover {
-            text-decoration: underline;
-        }
-
-        /* Responsive adjustments */
-        @media (max-width: 600px) {
-            .form-container {
-                padding: 20px;
-                width: 90%;
-            }
-            h1 {
-                font-size: 1.8rem;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="form-container">
-        <h1>{{ config.name|default:"Create Camera Configuration" }}</h1>
-        
-        <!-- Display messages here -->
-        {% for message in messages %}
-            <div class="alert {% if message.tags %}alert-{{ message.tags }}{% endif %}">
-                {{ message }}
-            </div>
-        {% endfor %}
-        
-        <form method="POST">
-            {% csrf_token %}
-            
-            <label for="name">Camera Name:</label>
-            <input type="text" id="name" name="name" value="{{ config.name|default:'' }}" placeholder="Enter camera name" required>
-            
-            <label for="camera_source">Camera Source:</label>
-            <input type="text" id="camera_source" name="camera_source" value="{{ config.camera_source|default:'' }}" placeholder="Enter 0 for default or IP camera URL (e.g., http://10.129.101.122:4747/video)" required>
-            
-            <label for="threshold">Threshold:</label>
-            <input type="number" step="0.01" id="threshold" name="threshold" value="{{ config.threshold|default:0.6 }}" placeholder="Enter threshold value (0.0 to 1.0)" required>
-            <button type="submit">Save</button>
-        </form>
-        
-        <button class="nav-button" onclick="location.href='{% url 'camera_config_list' %}'">Back to List</button>
-        <button class="nav-button" onclick="location.href='{% url 'home' %}'">Back to Home</button>
+                <div class="d-flex justify-content-between mt-3">
+                    <div>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                        <a class="btn btn-secondary" href="{% url 'camera_config_list' %}">Back to List</a>
+                    </div>
+                </div>
+            </form>
+        </div>
     </div>
-</body>
-</html>
+{% endblock %}

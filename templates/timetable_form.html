@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block title %}Add Timetable - {{ classroom.name }}{% endblock %}
+
+{% block content %}
+  <div class="container">
+    <div class="card">
+      <h1>Add Timetable for {{ classroom.name }}</h1>
+      <form method="post">{% csrf_token %}
+        <div class="form-group">
+          <label for="id_day">Day of week</label>
+          <select id="id_day" name="day_of_week" class="form-control">
+            <option value="0">Monday</option>
+            <option value="1">Tuesday</option>
+            <option value="2">Wednesday</option>
+            <option value="3">Thursday</option>
+            <option value="4">Friday</option>
+            <option value="5">Saturday</option>
+            <option value="6">Sunday</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-6">
+            <label for="id_start">Start time</label>
+            <input id="id_start" name="start_time" type="time" required class="form-control">
+          </div>
+          <div class="form-group col-md-6">
+            <label for="id_end">End time</label>
+            <input id="id_end" name="end_time" type="time" required class="form-control">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-6">
+            <label for="id_pre">Pre minutes (optional)</label>
+            <input id="id_pre" name="pre_minutes" type="number" class="form-control">
+          </div>
+          <div class="form-group col-md-6">
+            <label for="id_post">Post minutes (optional)</label>
+            <input id="id_post" name="post_minutes" type="number" class="form-control">
+          </div>
+        </div>
+        <div class="d-flex justify-content-between">
+          <div>
+            <button type="submit" class="btn btn-primary">Save</button>
+            <a class="btn btn-secondary" href="{% url 'timetable_list' pk=classroom.pk %}">Cancel</a>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

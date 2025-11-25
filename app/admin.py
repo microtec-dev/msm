@@ -1,11 +1,24 @@
 from django.contrib import admin
-from .models import Student, Attendance,CameraConfiguration
+from .models import Student, Attendance, CameraConfiguration, ClassRoom, Timetable
+
+
+class TimetableInline(admin.TabularInline):
+    model = Timetable
+    extra = 1
+
+
+@admin.register(ClassRoom)
+class ClassRoomAdmin(admin.ModelAdmin):
+    list_display = ['name']
+    inlines = [TimetableInline]
+
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-    list_display = ['name', 'email', 'phone_number', 'student_class', 'authorized']
-    list_filter = ['student_class', 'authorized']
+    list_display = ['name', 'email', 'phone_number', 'student_class', 'classroom', 'authorized']
+    list_filter = ['student_class', 'authorized', 'classroom']
     search_fields = ['name', 'email']
+
 
 @admin.register(Attendance)
 class AttendanceAdmin(admin.ModelAdmin):
@@ -29,5 +42,6 @@ class AttendanceAdmin(admin.ModelAdmin):
 
 @admin.register(CameraConfiguration)
 class CameraConfigurationAdmin(admin.ModelAdmin):
-    list_display = ['name', 'camera_source', 'threshold']
+    list_display = ['name', 'camera_source', 'threshold', 'schedule_enabled', 'class_assigned']
+    list_filter = ['schedule_enabled', 'class_assigned']
     search_fields = ['name']

@@ -15,71 +15,24 @@
             background-color: #f0f4f8;
             color: #333;
             display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            padding: 20px;
-        }
+            {% extends 'base.html' %}
 
-        .container {
-            background-color: #fff;
-            padding: 40px;
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
-            border-radius: 12px;
-            max-width: 500px;
-            width: 100%;
-            text-align: center;
-        }
+            {% block title %}Delete Camera - MSM Attendance{% endblock %}
 
-        h1 {
-            color: #444;
-            font-size: 1.8rem;
-            margin-bottom: 20px;
-        }
+            {% block content %}
+              <div class="container" style="max-width:700px">
+                <div class="card">
+                  <h2 class="text-danger">Delete Camera Configuration</h2>
+                  <p>Are you sure you want to delete the camera configuration: <strong>{{ config.name }}</strong>?</p>
 
-        p {
-            font-size: 1rem;
-            margin-bottom: 30px;
-            color: #666;
-        }
-
-        .button-container {
-            display: flex;
-            justify-content: space-between;
-            gap: 20px;
-        }
-
-        button, a {
-            padding: 12px 24px;
-            font-size: 1rem;
-            border-radius: 8px;
-            text-decoration: none;
-            border: none;
-            cursor: pointer;
-            font-weight: 600;
-            transition: background-color 0.3s ease;
-        }
-
-        button {
-            background-color: #dc3545;
-            color: #fff;
-            border: 1px solid #dc3545;
-        }
-
-        button:hover {
-            background-color: #c82333;
-        }
-
-        a {
-            background-color: #6c757d;
-            color: #fff;
-            display: inline-block;
-            text-align: center;
-        }
-
-        a:hover {
-            background-color: #5a6268;
+                  <form method="POST" style="display:inline-block;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">Yes, Delete</button>
+                  </form>
+                  <a class="btn btn-secondary" href="{% url 'camera_config_list' %}">Cancel</a>
+                </div>
+              </div>
+            {% endblock %}
         }
 
         /* Responsive Design */

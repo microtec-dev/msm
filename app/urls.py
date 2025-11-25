@@ -18,6 +18,13 @@ urlpatterns = [
     path('camera-config/list/', views.camera_config_list, name='camera_config_list'),
     path('camera-config/update/<int:pk>/', views.camera_config_update, name='camera_config_update'),
     path('camera-config/delete/<int:pk>/', views.camera_config_delete, name='camera_config_delete'),
+    path('classes/', views.class_list, name='class_list'),
+    path('classes/create/', views.class_create, name='class_create'),
+    path('classes/<int:pk>/edit/', views.class_update, name='class_update'),
+    path('classes/<int:pk>/delete/', views.class_delete, name='class_delete'),
+    path('classes/<int:pk>/timetables/', views.timetable_list, name='timetable_list'),
+    path('classes/<int:pk>/timetables/create/', views.timetable_create, name='timetable_create'),
+    path('timetables/<int:pk>/delete/', views.timetable_delete, name='timetable_delete'),
 ]
     
 

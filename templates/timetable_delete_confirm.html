@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block title %}Delete Timetable - MSM Attendance{% endblock %}
+
+{% block content %}
+  <div class="container">
+    <div class="card">
+      <h1>Delete Timetable</h1>
+      <p>Are you sure you want to delete timetable for {{ timetable.classroom.name }} on {{ timetable.get_day_of_week_display }} {{ timetable.start_time }}-{{ timetable.end_time }}?</p>
+      <form method="post">{% csrf_token %}
+        <button type="submit" class="btn btn-danger">Delete</button>
+        <a class="btn btn-secondary" href="{% url 'timetable_list' pk=timetable.classroom.pk %}">Cancel</a>
+      </form>
+    </div>
+  </div>
+{% endblock %}

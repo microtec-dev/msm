@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block title %}Delete Class - MSM Attendance{% endblock %}
+
+{% block content %}
+  <div class="container">
+    <div class="card">
+      <h1>Delete Class</h1>
+      <p>Are you sure you want to delete class '<strong>{{ cls.name }}</strong>'?</p>
+      <form method="post">{% csrf_token %}
+        <button type="submit" class="btn btn-danger">Delete</button>
+        <a class="btn btn-secondary" href="{% url 'class_list' %}">Cancel</a>
+      </form>
+    </div>
+  </div>
+{% endblock %}

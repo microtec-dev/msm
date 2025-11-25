@@ -5,7 +5,7 @@ import torch
 from facenet_pytorch import InceptionResnetV1, MTCNN
 from django.shortcuts import render, redirect, get_object_or_404
 from django.conf import settings
-from .models import Student, Attendance, CameraConfiguration
+from .models import Student, Attendance, CameraConfiguration, ClassRoom, Timetable
 from django.core.files.base import ContentFile
 from datetime import datetime, timedelta
 from django.utils import timezone
@@ -14,16 +14,11 @@ import pygame  # Import pygame for playing sounds
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.urls import reverse_lazy
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 import threading
 import time
 import base64
 from django.db import IntegrityError
-from django.contrib.auth.decorators import login_required, user_passes_test
-from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib.auth import authenticate, login
-from django.contrib import messages
-from .models import Student
 
 
 # Initialize MTCNN and InceptionResnetV1
@@ -45,14 +40,19 @@ def safe_imread(path):
     return img
 
 # Function to detect and encode faces
-def detect_and_encode(image):
+def detect_and_encode(image, boxes=None):
+    """Detect faces (or use provided boxes) and return embeddings list."""
     with torch.no_grad():
-        boxes, _ = mtcnn.detect(image)
+        if boxes is None:
+            boxes, _ = mtcnn.detect(image)
         if boxes is not None:
             faces = []
             for box in boxes:
-                face = image[int(box[1]):int(box[3]), int(box[0]):int(box[2])]
-                if face.size == 0:
+                try:
+                    face = image[int(box[1]):int(box[3]), int(box[0]):int(box[2])]
+                except Exception:
+                    continue
+                if face is None or face.size == 0:
                     continue
                 face = cv2.resize(face, (160, 160))
                 face = np.transpose(face, (2, 0, 1)).astype(np.float32) / 255.0
@@ -111,11 +111,18 @@ def recognize_faces(known_encodings, known_names, test_encodings, threshold=0.7)
 
 # View for capturing student information and image
 def capture_student(request):
+    classes = []
+    try:
+        from .models import ClassRoom
+        classes = ClassRoom.objects.all()
+    except Exception:
+        classes = []
+
     if request.method == 'POST':
         name = request.POST.get('name')
         email = request.POST.get('email')
         phone_number = request.POST.get('phone_number')
-        student_class = request.POST.get('student_class')
+        classroom_id = request.POST.get('student_class')
         image_data = request.POST.get('image_data')
 
         # Decode the base64 image data
@@ -129,15 +136,23 @@ def capture_student(request):
                 name=name,
                 email=email,
                 phone_number=phone_number,
-                student_class=student_class,
+                student_class='',
                 image=image_file,
                 authorized=False  # Default to False during registration
             )
+            # assign classroom if provided
+            if classroom_id:
+                try:
+                    from .models import ClassRoom
+                    student.classroom = ClassRoom.objects.get(pk=int(classroom_id))
+                except Exception:
+                    pass
+            
             student.save()
 
             return redirect('selfie_success')  # Redirect to a success page
 
-    return render(request, 'capture_student.html')
+    return render(request, 'capture_student.html', {'classes': classes})
 
 
 # Success view after capturing student information and image
@@ -179,6 +194,7 @@ def capture_and_recognize(request):
             max_failures = 5  # Allow 5 consecutive failures before giving up
 
             while not stop_event.is_set():
+
                 ret, frame = cap.read()
                 if not ret:
                     consecutive_failures += 1
@@ -188,19 +204,91 @@ def capture_and_recognize(request):
                         break
                     time.sleep(0.1)  # Brief pause before retry
                     continue  # Retry instead of breaking immediately
-                
+
                 consecutive_failures = 0  # Reset counter on successful read
+
+                # Schedule check: if schedule_enabled and class assigned, verify current time is within any timetable window
+                try:
+                    now_dt = datetime.now()
+                    is_active = True
+                    if cam_config.schedule_enabled and cam_config.class_assigned:
+                        from .models import Timetable
+                        weekday = now_dt.weekday()  # Monday=0
+                        timetables = Timetable.objects.filter(classroom=cam_config.class_assigned, day_of_week=weekday)
+                        is_active = False
+                        for tt in timetables:
+                            pre = tt.pre_minutes if tt.pre_minutes is not None else cam_config.pre_minutes
+                            post = tt.post_minutes if tt.post_minutes is not None else cam_config.post_minutes
+                            start_dt = datetime.combine(now_dt.date(), tt.start_time) - timedelta(minutes=pre or 0)
+                            end_dt = datetime.combine(now_dt.date(), tt.end_time) + timedelta(minutes=post or 0)
+                            if start_dt <= now_dt <= end_dt:
+                                is_active = True
+                                break
+                    if not is_active:
+                        # sleep briefly and skip processing heavy detection
+                        time.sleep(0.5)
+                        continue
+                except Exception as e:
+                    print(f"Schedule check error for {cam_config.name}: {e}")
+
+                # Motion detection: run cheap check before expensive face detection
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                gray = cv2.GaussianBlur(gray, (21, 21), 0)
+                if not hasattr(process_frame, 'prev_gray'):
+                    process_frame.prev_gray = {}
+                prev = process_frame.prev_gray.get(cam_config.name)
+                motion_detected = True
+                if prev is None:
+                    process_frame.prev_gray[cam_config.name] = gray
+                else:
+                    frame_delta = cv2.absdiff(prev, gray)
+                    thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
+                    non_zero = np.count_nonzero(thresh)
+                    # heuristic threshold (tune as needed)
+                    motion_threshold = 2000
+                    motion_detected = non_zero > motion_threshold
+                    process_frame.prev_gray[cam_config.name] = gray
+
+                if not motion_detected:
+                    # skip heavy face detection
+                    if not window_created:
+                        cv2.namedWindow(window_name)
+                        window_created = True
+                    cv2.imshow(window_name, frame)
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        stop_event.set()
+                        break
+                    continue
 
                 # Convert BGR to RGB
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                test_face_encodings = detect_and_encode(frame_rgb)  # Function to detect and encode face in frame
+                # First detect boxes to avoid double detection
+                boxes, _ = mtcnn.detect(frame_rgb)
+                if boxes is None:
+                    # No faces detected
+                    if not window_created:
+                        cv2.namedWindow(window_name)
+                        window_created = True
+                    cv2.imshow(window_name, frame)
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        stop_event.set()
+                        break
+                    continue
+
+                test_face_encodings = detect_and_encode(frame_rgb, boxes=boxes)
 
                 if test_face_encodings:
                     known_face_encodings, known_face_names = encode_uploaded_images()  # Load known face encodings once
                     if known_face_encodings:
                         names = recognize_faces(np.array(known_face_encodings), known_face_names, test_face_encodings, threshold)
 
-                        for name, box in zip(names, mtcnn.detect(frame_rgb)[0]):
+                        # debounce settings: avoid toggling attendance too often if person walks by repeatedly
+                        recognition_cooldown_seconds = 300  # 5 minutes default cooldown per student
+                        min_checkout_seconds = 60  # require at least 60s after check-in before allowing check-out
+                        if not hasattr(process_frame, 'last_seen'):
+                            process_frame.last_seen = {}
+
+                        for name, box in zip(names, boxes):
                             if box is not None:
                                 (x1, y1, x2, y2) = map(int, box)
                                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
@@ -211,21 +299,34 @@ def capture_and_recognize(request):
                                     if students.exists():
                                         student = students.first()
 
-                                        # Manage attendance based on check-in and check-out logic
+                                        # Manage attendance with debounce to prevent rapid toggles
                                         attendance, created = Attendance.objects.get_or_create(student=student, date=datetime.now().date())
+                                        now_tz = timezone.now()
+                                        last_seen = process_frame.last_seen.get(student.pk)
+
+                                        # If we've seen this student recently, skip toggling (avoid noise when walking by)
+                                        if last_seen and (now_tz - last_seen).total_seconds() < recognition_cooldown_seconds:
+                                            # Annotate as recently seen and continue
+                                            cv2.putText(frame, f"{name} (recent)", (x1, y1 - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2, cv2.LINE_AA)
+                                            continue
+
                                         if created:
                                             attendance.mark_checked_in()
+                                            process_frame.last_seen[student.pk] = now_tz
                                             success_sound.play()
                                             cv2.putText(frame, f"{name}, checked in.", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
                                         else:
                                             if attendance.check_in_time and not attendance.check_out_time:
-                                                if timezone.now() >= attendance.check_in_time + timedelta(seconds=60):
+                                                # allow check-out only after a minimum duration since check-in
+                                                if now_tz >= attendance.check_in_time + timedelta(seconds=min_checkout_seconds):
                                                     attendance.mark_checked_out()
+                                                    process_frame.last_seen[student.pk] = now_tz
                                                     success_sound.play()
                                                     cv2.putText(frame, f"{name}, checked out.", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
                                                 else:
                                                     cv2.putText(frame, f"{name}, checked in.", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
                                             elif attendance.check_in_time and attendance.check_out_time:
+                                                # already checked out for today — do not toggle back in immediately
                                                 cv2.putText(frame, f"{name}, checked out.", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
 
                 # Display frame in separate window for each camera
@@ -369,11 +470,25 @@ def student_update(request, pk):
         if 'image' in request.FILES and request.FILES['image']:
             student.image = request.FILES['image']
 
+        # handle classroom selection
+        classroom_id = request.POST.get('student_class')
+        if classroom_id:
+            try:
+                from .models import ClassRoom
+                student.classroom = ClassRoom.objects.get(pk=int(classroom_id))
+            except Exception:
+                student.classroom = None
+
         student.save()
         messages.success(request, 'Student updated successfully.')
         return redirect('student-detail', pk=student.pk)
 
-    return render(request, 'student_form.html', {'student': student})
+    # supply classes for select
+    try:
+        classes = ClassRoom.objects.all()
+    except Exception:
+        classes = []
+    return render(request, 'student_form.html', {'student': student, 'classes': classes})
 
 @login_required
 @user_passes_test(is_admin)
@@ -437,19 +552,40 @@ def user_logout(request):
 @user_passes_test(is_admin)
 def camera_config_create(request):
     # Check if the request method is POST, indicating form submission
+    # load classes for select
+    try:
+        classes = ClassRoom.objects.all()
+    except Exception:
+        classes = []
+
     if request.method == "POST":
         # Retrieve form data from the request
         name = request.POST.get('name')
         camera_source = request.POST.get('camera_source')
         threshold = request.POST.get('threshold')
+        motion_threshold = request.POST.get('motion_threshold')
+        class_assigned = request.POST.get('class_assigned') or request.POST.get('student_class')
+        schedule_enabled = request.POST.get('schedule_enabled') == 'on'
+        pre_minutes = request.POST.get('pre_minutes')
+        post_minutes = request.POST.get('post_minutes')
 
         try:
             # Save the data to the database using the CameraConfiguration model
-            CameraConfiguration.objects.create(
+            cfg = CameraConfiguration.objects.create(
                 name=name,
                 camera_source=camera_source,
                 threshold=threshold,
+                motion_threshold=motion_threshold or 2000,
+                schedule_enabled=schedule_enabled,
+                pre_minutes=int(pre_minutes) if pre_minutes else 5,
+                post_minutes=int(post_minutes) if post_minutes else 5,
             )
+            if class_assigned:
+                try:
+                    cfg.class_assigned = ClassRoom.objects.get(pk=int(class_assigned))
+                    cfg.save()
+                except Exception:
+                    pass
             # Redirect to the list of camera configurations after successful creation
             return redirect('camera_config_list')
 
@@ -460,7 +596,7 @@ def camera_config_create(request):
             return render(request, 'camera_config_form.html')
 
     # Render the camera configuration form for GET requests
-    return render(request, 'camera_config_form.html')
+    return render(request, 'camera_config_form.html', {'classes': classes})
 
 
 # READ: Function to list all camera configurations
@@ -481,12 +617,29 @@ def camera_config_update(request, pk):
     config = get_object_or_404(CameraConfiguration, pk=pk)
 
     # Check if the request method is POST, indicating form submission
+    # load classes for select
+    try:
+        classes = ClassRoom.objects.all()
+    except Exception:
+        classes = []
+
     if request.method == "POST":
         # Update the configuration fields with data from the form
         config.name = request.POST.get('name')
         config.camera_source = request.POST.get('camera_source')
         config.threshold = request.POST.get('threshold')
         config.success_sound_path = request.POST.get('success_sound_path')
+        # new fields
+        config.motion_threshold = int(request.POST.get('motion_threshold') or config.motion_threshold)
+        class_assigned = request.POST.get('class_assigned') or request.POST.get('student_class')
+        if class_assigned:
+            try:
+                config.class_assigned = ClassRoom.objects.get(pk=int(class_assigned))
+            except Exception:
+                config.class_assigned = None
+        config.schedule_enabled = request.POST.get('schedule_enabled') == 'on'
+        config.pre_minutes = int(request.POST.get('pre_minutes') or config.pre_minutes)
+        config.post_minutes = int(request.POST.get('post_minutes') or config.post_minutes)
 
         # Save the changes to the database
         config.save()  
@@ -495,7 +648,7 @@ def camera_config_update(request, pk):
         return redirect('camera_config_list')  
     
     # Render the configuration form with the current configuration data for GET requests
-    return render(request, 'camera_config_form.html', {'config': config})
+    return render(request, 'camera_config_form.html', {'config': config, 'classes': classes})
 
 
 # DELETE: Function to delete a camera configuration
@@ -514,3 +667,84 @@ def camera_config_delete(request, pk):
 
     # Render the delete confirmation template with the configuration data
     return render(request, 'camera_config_delete.html', {'config': config})
+
+
+# Class and Timetable management views
+@login_required
+@user_passes_test(is_admin)
+def class_list(request):
+    classes = ClassRoom.objects.all()
+    return render(request, 'class_list.html', {'classes': classes})
+
+
+@login_required
+@user_passes_test(is_admin)
+def class_create(request):
+    if request.method == 'POST':
+        name = request.POST.get('name')
+        if name:
+            ClassRoom.objects.create(name=name)
+            return redirect('class_list')
+    return render(request, 'class_form.html')
+
+
+@login_required
+@user_passes_test(is_admin)
+def class_update(request, pk):
+    cls = get_object_or_404(ClassRoom, pk=pk)
+    if request.method == 'POST':
+        cls.name = request.POST.get('name')
+        cls.save()
+        return redirect('class_list')
+    return render(request, 'class_form.html', {'cls': cls})
+
+
+@login_required
+@user_passes_test(is_admin)
+def class_delete(request, pk):
+    cls = get_object_or_404(ClassRoom, pk=pk)
+    if request.method == 'POST':
+        cls.delete()
+        return redirect('class_list')
+    return render(request, 'class_delete_confirm.html', {'cls': cls})
+
+
+@login_required
+@user_passes_test(is_admin)
+def timetable_list(request, pk):
+    classroom = get_object_or_404(ClassRoom, pk=pk)
+    timetables = Timetable.objects.filter(classroom=classroom).order_by('day_of_week', 'start_time')
+    return render(request, 'timetable_list.html', {'classroom': classroom, 'timetables': timetables})
+
+
+@login_required
+@user_passes_test(is_admin)
+def timetable_create(request, pk):
+    classroom = get_object_or_404(ClassRoom, pk=pk)
+    if request.method == 'POST':
+        day = int(request.POST.get('day_of_week'))
+        start = request.POST.get('start_time')
+        end = request.POST.get('end_time')
+        pre = request.POST.get('pre_minutes') or None
+        post = request.POST.get('post_minutes') or None
+        tt = Timetable.objects.create(
+            classroom=classroom,
+            day_of_week=day,
+            start_time=start,
+            end_time=end,
+            pre_minutes=int(pre) if pre else None,
+            post_minutes=int(post) if post else None,
+        )
+        return redirect('timetable_list', pk=classroom.pk)
+    return render(request, 'timetable_form.html', {'classroom': classroom})
+
+
+@login_required
+@user_passes_test(is_admin)
+def timetable_delete(request, pk):
+    tt = get_object_or_404(Timetable, pk=pk)
+    classroom_pk = tt.classroom.pk
+    if request.method == 'POST':
+        tt.delete()
+        return redirect('timetable_list', pk=classroom_pk)
+    return render(request, 'timetable_delete_confirm.html', {'timetable': tt, 'classroom': tt.classroom})

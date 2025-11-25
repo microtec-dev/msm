@@ -121,7 +121,12 @@
                     </div>
                     <div class="form-group">
                         <label for="student_class">Class:</label>
-                        <input type="text" class="form-control" id="student_class" name="student_class" required>
+                        <select class="form-control" id="student_class" name="student_class" required>
+                            <option value="">-- Select Class --</option>
+                            {% for cls in classes %}
+                                <option value="{{ cls.pk }}">{{ cls.name }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
 
                     <canvas id="canvas" width="640" height="480" style="display: none;"></canvas>

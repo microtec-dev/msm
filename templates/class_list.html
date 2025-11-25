@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block title %}Classes - MSM Attendance{% endblock %}
+
+{% block content %}
+  <div class="container">
+    <div class="card">
+      <h1 style="margin-top:0">Classes</h1>
+      <div class="mb-3">
+        <a class="btn btn-primary" href="{% url 'class_create' %}">Create Class</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-bordered table-hover">
+          <thead class="thead-light">
+            <tr>
+              <th>Name</th>
+              <th>Description</th>
+              <th>Timetables</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cls in classes %}
+            <tr>
+              <td>{{ cls.name }}</td>
+              <td>{{ cls.description|default:'-' }}</td>
+              <td>
+                {% for tt in cls.timetable_set.all|dictsort:"day_of_week" %}
+                  <div style="font-size:14px">{{ tt.get_day_of_week_display }}: {{ tt.start_time }} - {{ tt.end_time }} (±{{ tt.pre_minutes|default:cls.pre_minutes }} / +{{ tt.post_minutes|default:cls.post_minutes }} min)</div>
+                {% empty %}
+                  <div class="text-muted">(no timetable)</div>
+                {% endfor %}
+              </td>
+              <td class="actions">
+                <a class="btn btn-sm btn-outline-primary" href="{% url 'class_update' pk=cls.pk %}"><i class="fas fa-edit"></i> Edit</a>
+                <a class="btn btn-sm btn-outline-info" href="{% url 'timetable_list' pk=cls.pk %}"><i class="fas fa-calendar-alt"></i> Timetables</a>
+                <a class="btn btn-sm btn-outline-danger" href="{% url 'class_delete' pk=cls.pk %}"><i class="fas fa-trash"></i> Delete</a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-center">No classes yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endblock %}

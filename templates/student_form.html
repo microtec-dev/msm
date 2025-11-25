@@ -1,48 +1,57 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edit Student</title>
-    <style>
-        body { font-family: 'Roboto', Arial, sans-serif; background-color:#f9f9f9; }
-        .container { max-width:600px; margin:30px auto; background:#fff; padding:24px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
-        label { display:block; margin-top:12px; font-weight:600; }
-        input[type="text"], input[type="email"], input[type="file"] { width:100%; padding:8px; margin-top:6px; border:1px solid #ddd; border-radius:4px; }
-        .actions { margin-top:16px; text-align:center; }
-        button, .actions a { padding:10px 18px; border-radius:6px; text-decoration:none; color:#fff; background:#007bff; border:none; }
-        .actions a { background:#6c757d; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Edit Student</h1>
-        <form method="post" enctype="multipart/form-data">
-            {% csrf_token %}
-            <label for="name">Name</label>
-            <input id="name" name="name" type="text" value="{{ student.name }}" required>
+{% extends 'base.html' %}
 
-            <label for="email">Email</label>
-            <input id="email" name="email" type="email" value="{{ student.email }}">
+{% block title %}Edit Student - MSM Attendance{% endblock %}
 
-            <label for="phone_number">Phone Number</label>
-            <input id="phone_number" name="phone_number" type="text" value="{{ student.phone_number }}">
+{% block content %}
+    <div class="container" style="max-width:700px">
+        <div class="card">
+            <h1 class="text-primary">Edit Student</h1>
 
-            <label for="student_class">Class</label>
-            <input id="student_class" name="student_class" type="text" value="{{ student.student_class }}">
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="name">Name</label>
+                    <input id="name" name="name" type="text" class="form-control" value="{{ student.name }}" required>
+                </div>
 
-            <label for="image">Replace Image (optional)</label>
-            <input id="image" name="image" type="file" accept="image/*">
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <label for="email">Email</label>
+                        <input id="email" name="email" type="email" class="form-control" value="{{ student.email }}">
+                    </div>
+                    <div class="form-group col-md-6">
+                        <label for="phone_number">Phone Number</label>
+                        <input id="phone_number" name="phone_number" type="text" class="form-control" value="{{ student.phone_number }}">
+                    </div>
+                </div>
 
-            <label>
-                <input type="checkbox" name="authorized" {% if student.authorized %}checked{% endif %}> Authorized
-            </label>
+                <div class="form-group">
+                    <label for="student_class">Class</label>
+                    <select id="student_class" name="student_class" class="form-control">
+                        <option value="">-- Select Class --</option>
+                        {% for cls in classes %}
+                            <option value="{{ cls.pk }}" {% if student.classroom and student.classroom.pk == cls.pk %}selected{% endif %}>{{ cls.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
 
-            <div class="actions">
-                <button type="submit">Save</button>
-                <a href="{% url 'student-detail' pk=student.pk %}">Cancel</a>
-            </div>
-        </form>
+                <div class="form-group">
+                    <label for="image">Replace Image (optional)</label>
+                    <input id="image" name="image" type="file" accept="image/*" class="form-control-file">
+                </div>
+
+                <div class="form-check mb-3">
+                    <input type="checkbox" class="form-check-input" id="authorized" name="authorized" {% if student.authorized %}checked{% endif %}>
+                    <label class="form-check-label" for="authorized">Authorized</label>
+                </div>
+
+                <div class="d-flex justify-content-between mt-3">
+                    <div>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                        <a class="btn btn-secondary" href="{% url 'student-detail' pk=student.pk %}">Cancel</a>
+                    </div>
+                </div>
+            </form>
+        </div>
     </div>
-</body>
-</html>
+{% endblock %}
