@@ -68,7 +68,8 @@
         <div class="actions">
             <a href="{% url 'student-list' %}">Back to List</a>
             <a href="{% url 'student-authorize' pk=student.pk %}">Authorize</a>
-            <a href="{% url 'student-delete' pk=student.pk %}">Delete</a> <!-- Add this line -->
+            <a href="{% url 'student-update' pk=student.pk %}">Edit</a>
+            <a href="{% url 'student-delete' pk=student.pk %}">Delete</a>
         </div>
     </div>
 </body>
